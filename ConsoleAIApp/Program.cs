@@ -24,9 +24,9 @@ namespace ConsoleAIApp
         static void Main(string[] args)
         {
             // Veriyi yükleyip işleyelim
-            var train_data = GetTrainingData("C:/Users/ozlem/Downloads/ChestXRay2017/chest_xray/train");
-            var test_data = GetTrainingData("C:/Users/ozlem/Downloads/ChestXRay2017/chest_xray/test");
-            var val_data = GetTrainingData("C:/Users/ozlem/Downloads/ChestXRay2017/chest_xray/val");
+            var train_data = GetTrainingData("C:/Users/ozlem/OneDrive/Masaüstü/chest_xray/train");
+            var test_data = GetTrainingData("C:/Users/ozlem/OneDrive/Masaüstü/chest_xray/test");
+            var val_data = GetTrainingData("C:/Users/ozlem/OneDrive/Masaüstü/chest_xray/val");
 
             var (x_train, y_train) = PrepareData(train_data);
             var (x_test, y_test) = PrepareData(test_data);
@@ -49,7 +49,7 @@ namespace ConsoleAIApp
             Console.WriteLine($"Test accuracy: {(score[1] * 100)}%");
 
             // Sınıflandırma raporu ve karışıklık matrisi
-            GenerateClassificationReport(x_test, y_test);
+            //GenerateClassificationReport(x_test, y_test);
         }
 
         static List<(Mat, int)> GetTrainingData(string data_dir)
@@ -92,7 +92,7 @@ namespace ConsoleAIApp
             }
 
             // Convert List<NDArray> to NDArray
-            var x_data = np.array(images.ToArray());
+            var x_data = np.stack(images.ToArray());
 
             // Reshape to (batch_size, img_size, img_size, 1)
             x_data = x_data.reshape(new Shape(-1, img_size, img_size, 1)); // Correct usage
@@ -107,27 +107,15 @@ namespace ConsoleAIApp
         static Sequential BuildModel()
         {
             var model = new Sequential(new SequentialArgs());
-            model.add(new Conv2D(new Conv2DArgs()
-            {
-                Filters = 32,
-                KernelSize = (3, 3),
-                Activation = tf.keras.activations.Relu,
-                Padding = "same",
-                InputShape = new Shape(img_size, img_size, 1)
-            }));
+            model.add(tf.keras.layers.Conv2D(32, (3, 3), null, "same"));
+            
             model.add(new BatchNormalization(new BatchNormalizationArgs()));
             model.add(new MaxPooling2D(new MaxPooling2DArgs()
             {
                 PoolSize = (2, 2),
                 Padding = "same"
             }));
-            model.add(new Conv2D(new Conv2DArgs()
-            {
-                Filters = 64,
-                KernelSize = (3, 3),
-                Activation = tf.keras.activations.Relu,
-                Padding = "same"
-            }));
+            model.add(tf.keras.layers.Conv2D(64, (3, 3), null, "same", null, null, 0, "relu", true, null, null));
             model.add(new Dropout(new DropoutArgs { Rate = 0.1f }));
             model.add(new BatchNormalization(new BatchNormalizationArgs()));
             model.add(new MaxPooling2D(new MaxPooling2DArgs()
@@ -135,26 +123,16 @@ namespace ConsoleAIApp
                 PoolSize = (2, 2),
                 Padding = "same"
             }));
-            model.add(new Conv2D(new Conv2DArgs()
-            {
-                Filters = 64,
-                KernelSize = (3, 3),
-                Activation = tf.keras.activations.Relu,
-                Padding = "same"
-            }));
+            model.add(tf.keras.layers.Conv2D(64, (3, 3), null, "same", null, null, 0, "relu", true, null, null));
+
             model.add(new BatchNormalization(new BatchNormalizationArgs()));
             model.add(new MaxPooling2D(new MaxPooling2DArgs()
             {
                 PoolSize = (2, 2),
                 Padding = "same"
             }));
-            model.add(new Conv2D(new Conv2DArgs()
-            {
-                Filters = 128,
-                KernelSize = (3, 3),
-                Activation = tf.keras.activations.Relu,
-                Padding = "same"
-            }));
+            model.add(tf.keras.layers.Conv2D(128, (3, 3), null, "same", null, null, 0, "relu", true, null, null));
+
             model.add(new Dropout(new DropoutArgs { Rate = 0.2f }));
             model.add(new BatchNormalization(new BatchNormalizationArgs()));
             model.add(new MaxPooling2D(new MaxPooling2DArgs()
@@ -162,13 +140,8 @@ namespace ConsoleAIApp
                 PoolSize = (2, 2),
                 Padding = "same"
             }));
-            model.add(new Conv2D(new Conv2DArgs()
-            {
-                Filters = 256,
-                KernelSize = (3, 3),
-                Activation = tf.keras.activations.Relu,
-                Padding = "same"
-            }));
+            model.add(tf.keras.layers.Conv2D(256, (3, 3), null, "same", null, null, 0, "relu", true, null, null));
+
             model.add(new Dropout(new DropoutArgs { Rate = 0.2f }));
             model.add(new BatchNormalization(new BatchNormalizationArgs()));
             model.add(new MaxPooling2D(new MaxPooling2DArgs()
@@ -193,11 +166,17 @@ namespace ConsoleAIApp
         static void GenerateClassificationReport(NDArray predictions, NDArray y_test)
         {
             // Convert NDArray to int arrays for easier processing
-            var yTrue = y_test.ToArray<int>();
-            var yPred = predictions.ToArray<int>();
+            var yTrue = y_test.ToArray<float>().Select(v => (int)(v + 0.5f)).ToArray(); // Convert floats to binary labels (0 or 1)
+
+            // Convert predictions to float and then to class labels
+            var yPred = predictions.ToArray<float>().Select(p => p > 0.5f ? 1 : 0).ToArray();
+            // Convert predictions to class labels (assuming a binary classification)
+            var yPredLabels = yPred.Select(p => p > 0.5f ? 1 : 0).ToArray();
+
+            // Assuming y_test is also float and should be converted to int
 
             // Calculate confusion matrix
-            var confusionMatrix = GetConfusionMatrix(yTrue, yPred);
+            var confusionMatrix = GetConfusionMatrix(yTrue, yPredLabels);
 
             // Print confusion matrix
             Console.WriteLine("Confusion Matrix:");
@@ -238,14 +217,17 @@ namespace ConsoleAIApp
             var width = mat.Cols;
             var channels = 1; // For grayscale images
 
-            // Convert Mat to byte array
-            var byteArray = mat.ToBytes();
+            // Create a new NDArray with the correct shape
+            var ndArray = np.zeros(new Shape(height, width, channels), dtype: np.float32);
 
-            // Create NDArray from byte array
-            var ndArray = np.array(byteArray, dtype: np.float32);
-
-            // Reshape to (height, width, channels)
-            ndArray = ndArray.reshape( new Shape(height, width, channels));
+            // Copy the data from the Mat to the NDArray
+            for (int i = 0; i < height; i++)
+            {
+                for (int j = 0; j < width; j++)
+                {
+                    ndArray[i, j, 0] = mat.Get<float>(i, j);
+                }
+            }
 
             return ndArray;
         }
